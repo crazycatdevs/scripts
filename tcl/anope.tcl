@@ -39,16 +39,19 @@ set CS_ADESC "Alias for chanserv"
    || aop add|del %(nicks) %(irc_server_channels)\
 } cs_op {}
 
+::weechat::hook_command global $SCRIPT_NAME "your global message here" "Send a message to all users" {} global_msg {}
 array set SERVICES_NAMES {
    "chanserv"  "ChanServ"
    "nickserv"  "NickServ"
    "hostserv"  "HostServ"
+   "global"    "Global"
 }
 
 array set SERVICES_DESC {
    "chanserv"  "Channel management service name"
    "nickserv"  "Channel management service name"
    "hostserv"  "Channel management service name"
+   "global"    "Global messaging system"
 }
 proc anope_setup {} {
    set slist [::weechat::infolist_get "irc_server" "" ""]
@@ -64,20 +67,23 @@ proc anope_setup {} {
    ::weechat::infolist_free $slist
 }
 
+proc global_msg {data buffer args} {
+   lassign server schannel [buffer2sc $buffer]
+   if {$server eq $::weechat::WEECHAT_RC_ERROR} {
+      return $::weechat::WEECHAT_RC_ERROR
+   }
+   ::weechat::command "" "/msg [::weechat::config_get_plugin "${server}.global"] GLOBAL [join $args]"
+   return $::weechat::WEECHAT_RC_OK
+}
+
 proc cs_op {data buffer args} {
-   set btype [::weechat::buffer_get_string $buffer "localvar_type"]
+   lassign server schannel [buffer2sc $buffer]
+   if {$server eq $::weechat::WEECHAT_RC_ERROR} {
+      return $::weechat::WEECHAT_RC_ERROR
+   }
    lassign {*}$args csact csflag nick channel
-   switch $btype {
-      channel {
-         lassign [split [::weechat::buffer_get_string $buffer "localvar_name"] {.}] server channel 
-      }
-      server {
-         set server [::weechat::buffer_get_string $buffer "localvar_channel"]
-      }
-      default {
-         ::weechat::print $buffer "Sorry but you need to be in a server or a channel to use this command"
-         return $::weechat::WEECHAT_RC_ERROR
-      }
+   if {$channel eq ""} {
+      set channel $schannel
    }
    if {([string tolower $csflag] ni [list "add" "del"]) || ($nick eq "") || ($channel eq "")} {
       ::weechat::print $buffer "Usage: /cs $::CS_ARGS"
@@ -86,6 +92,22 @@ proc cs_op {data buffer args} {
    ::weechat::command $server "/msg [::weechat::config_get_plugin "${server}.chanserv"] $csact $channel $csflag $nick"
    
    return $::weechat::WEECHAT_RC_OK
+}
+
+proc buffer2sc { buffer } {
+   set btype [::weechat::buffer_get_string $buffer "localvar_type"]
+   switch $btype {
+      channel {
+         set sc [split [::weechat::buffer_get_string $buffer "localvar_name"] {.}]
+      }
+      server {
+         set sc {[::weechat::buffer_get_string $buffer "localvar_channel"] ""}
+      }
+      default {
+         ::weechat::print $buffer "Sorry but you need to be in a server or a channel to use this command"
+         return $::weechat::WEECHAT_RC_ERROR
+      }
+   }
 }
 
 anope_setup
