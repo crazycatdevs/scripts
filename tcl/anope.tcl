@@ -31,7 +31,7 @@ set CS_ARGS "vop|hop|aop <add|del> nick \[#channel\]"
 
 set CS_ADESC "Alias for chanserv"
 
-
+set CS_ACTIONS {"vop" "hop" "aop"}
 ::weechat::register $SCRIPT_NAME {CrazyCat <crazycat@c-p-f.org>} $SCRIPT_VERSION GPL3 $SCRIPT_SUMMARY {} {}
 ::weechat::hook_command cs $SCRIPT_SUMMARY $CS_ARGS $CS_ADESC {\
    vop add|del %(nicks) %(irc_server_channels)\
@@ -68,7 +68,7 @@ proc anope_setup {} {
 }
 
 proc global_msg {data buffer args} {
-   lassign server schannel [buffer2sc $buffer]
+   lassign [buffer2sc $buffer] server schannel
    if {$server eq $::weechat::WEECHAT_RC_ERROR} {
       return $::weechat::WEECHAT_RC_ERROR
    }
@@ -77,11 +77,16 @@ proc global_msg {data buffer args} {
 }
 
 proc cs_op {data buffer args} {
-   lassign server schannel [buffer2sc $buffer]
+   lassign [buffer2sc $buffer] server schannel
    if {$server eq $::weechat::WEECHAT_RC_ERROR} {
       return $::weechat::WEECHAT_RC_ERROR
    }
    lassign {*}$args csact csflag nick channel
+   if {$csact ni $::CS_ACTIONS} {
+      # bypass for unknown actions
+      ::weechat::command "" "/msg [::weechat::config_get_plugin "${server}.chanserv"] [join $args]"
+      return $::weechat::WEECHAT_RC_OK
+   }
    if {$channel eq ""} {
       set channel $schannel
    }
@@ -101,13 +106,14 @@ proc buffer2sc { buffer } {
          set sc [split [::weechat::buffer_get_string $buffer "localvar_name"] {.}]
       }
       server {
-         set sc {[::weechat::buffer_get_string $buffer "localvar_channel"] ""}
+         set sc [list [::weechat::buffer_get_string $buffer "localvar_channel"] ""]
       }
       default {
          ::weechat::print $buffer "Sorry but you need to be in a server or a channel to use this command"
          return $::weechat::WEECHAT_RC_ERROR
       }
    }
+   return $sc
 }
 
 anope_setup
